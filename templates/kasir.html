@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="id" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kasir Pukimart</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .card-barang { cursor: pointer; transition: transform 0.2s; position: relative; }
+        .card-barang:hover { transform: translateY(-5px); border-color: #0d6efd; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .struk-kertas { font-family: 'Courier New', Courier, monospace; font-size: 0.9rem; }
+        .garis-putus { border-bottom: 1px dashed #000; margin: 10px 0; }
+        .kategori-title { padding: 15px 0 5px 0; margin-top: 10px; }
+        .badge-stok { position: absolute; top: 10px; right: 10px; font-size: 0.75rem; }
+        
+        @media (min-width: 992px) {
+            .menu-kiri { height: 85vh; overflow-y: auto; padding-right: 10px; }
+            .keranjang-kanan { position: sticky; top: 20px; }
+        }
+        @media (max-width: 576px) {
+            .display-4 { font-size: 2.5rem; }
+            .card-barang h6 { font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body class="bg-body-tertiary">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 shadow-sm">
+    <div class="container-fluid px-lg-5">
+        <span class="navbar-brand mb-0 h1">PUKIMART 🛒</span>
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <button class="btn btn-info btn-sm fw-bold text-white shadow" data-bs-toggle="modal" data-bs-target="#modalStatistik">📊 Omset & Riwayat</button>
+            {% if role == 'Kepala Toko' %}
+            <button class="btn btn-warning btn-sm fw-bold shadow" data-bs-toggle="modal" data-bs-target="#modalAdmin">👑 Kelola Stok & Barang</button>
+            {% endif %}
+            <button class="btn btn-outline-light btn-sm" onclick="toggleDarkMode()">🌙 Mode</button>
+            <span class="text-white me-2 ms-2 fw-bold d-none d-sm-block">[{{ role }}]</span>
+            <a href="/logout" class="btn btn-sm btn-danger">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container-fluid px-lg-5 mb-5">
+    <div class="row g-4">
+        
+        <div class="col-lg-8 menu-kiri">
+            {% for kategori, daftar_barang in barang.items() %}
+            <h5 class="kategori-title border-bottom fw-bold text-primary">{{ kategori }}</h5>
+            <div class="row mb-4">
+                {% for item in daftar_barang %}
+                <div class="col-6 col-sm-4 col-md-3 mb-3">
+                    <div class="card card-barang text-center p-2 p-md-3 h-100 shadow-sm" 
+                         id="card-{{ item['nama']|replace(' ', '-') }}"
+                         data-nama="{{ item['nama'] }}" 
+                         data-harga="{{ item['harga'] }}" 
+                         data-stok="{{ item['stok'] }}"
+                         onclick="tambahKeKeranjang(this)">
+                        
+                        <span class="badge bg-secondary badge-stok" id="stok-display-{{ item['nama']|replace(' ', '-') }}">Stok: {{ item['stok'] }}</span>
+                        <h1 class="display-4 mb-1 mt-2">{{ item['icon'] }}</h1>
+                        <h6 class="mt-2 text-truncate" title="{{ item['nama'] }}">{{ item['nama'] }}</h6>
+                        <span class="text-success fw-bold">Rp {{ "{:,.0f}".format(item['harga']).replace(',', '.') }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow-sm keranjang-kanan border-primary">
+                <div class="card-header bg-primary text-white fw-bold text-center">Keranjang Belanja</div>
+                <div class="card-body p-2 p-md-3">
+                    <ul id="list-keranjang" class="list-group list-group-flush mb-2" style="min-height: 150px; max-height: 300px; overflow-y: auto;">
+                        <li class="list-group-item text-center text-muted small mt-4" id="keranjang-kosong">Keranjang masih kosong...</li>
+                    </ul>
+                    
+                    <h6 class="d-flex justify-content-between px-2 pt-2 text-muted">
+                        <span>Subtotal:</span>
+                        <span id="subtotal-harga">Rp 0</span>
+                    </h6>
+                    <div id="promo-container" class="px-2 mb-2" style="font-size: 0.85rem;">
+                        </div>
+                    <h5 class="d-flex justify-content-between border-top pt-3 px-2">
+                        <span>Total Bayar:</span>
+                        <span id="total-harga" class="text-danger fw-bold">Rp 0</span>
+                    </h5>
+                    
+                    <button class="btn btn-success w-100 mt-2 fw-bold py-2 shadow-sm" onclick="bukaModalBayar()">Proses Pembayaran</button>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+<div class="modal fade" id="modalStatistik" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title fw-bold">📊 Monitoring Omset & Histori Penjualan</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row text-center mb-4">
+            <div class="col-md-4 mb-2">
+                <div class="card bg-success text-white p-3 shadow-sm">
+                    <small>Total Omset Pendapatan</small>
+                    <h4 class="mb-0 mt-1 fw-bold">Rp {{ "{:,.0f}".format(laporan['total_pendapatan']).replace(',', '.') }}</h4>
+                </div>
+            </div>
+            <div class="col-md-4 mb-2">
+                <div class="card bg-primary text-white p-3 shadow-sm">
+                    <small>Produk Terlaris (Best Seller)</small>
+                    <h4 class="mb-0 mt-1 fw-bold" style="font-size: 1.1rem;">{{ best_seller }}</h4>
+                </div>
+            </div>
+            <div class="col-md-4 mb-2">
+                <div class="card bg-secondary text-white p-3 shadow-sm">
+                    <small>Transaksi Sukses</small>
+                    <h4 class="mb-0 mt-1 fw-bold">{{ laporan['jumlah_transaksi'] }} Struk</h4>
+                </div>
+            </div>
+        </div>
+        <hr>
+        <h6 class="fw-bold text-dark mb-3">🕒 Daftar Barang Kejual</h6>
+        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+            <table class="table table-striped table-sm text-start" style="font-size: 0.9rem;">
+                <thead class="table-dark">
+                    <tr><th>Waktu</th><th>Barang Terjual</th><th>Total</th></tr>
+                </thead>
+                <tbody>
+                    {% for t in riwayat|reverse %}
+                    <tr><td>{{ t['waktu'] }}</td><td>{{ t['items'] }}</td><td class="text-success fw-bold">Rp {{ "{:,.0f}".format(t['total']).replace(',', '.') }}</td></tr>
+                    {% else %}
+                    <tr><td colspan="3" class="text-center text-muted">Belum ada riwayat penjualan terdokumentasi.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if role == 'Kepala Toko' %}
+<div class="modal fade" id="modalAdmin" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-warning">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title fw-bold">👑 Manajemen Inventori & Stok Kelola</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <h6 class="fw-bold text-success mb-3">🔄 Tambah / Kurangi Stok Barang yang Ada</h6>
+        <form action="/update_stok" method="POST" class="row g-3 bg-light p-3 rounded mb-4 border text-start">
+            <div class="col-md-5">
+                <label class="form-label small fw-bold text-dark">Pilih Barang</label>
+                <select class="form-select text-dark" name="nama_barang" required>
+                    {% for kategori, daftar in barang.items() %}
+                    <optgroup label="{{ kategori }}">
+                        {% for item in daftar %}<option value="{{ item['nama'] }}">{{ item['nama'] }} (Sisa: {{ item['stok'] }})</option>{% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-dark">Aksi</label>
+                <select class="form-select text-dark" name="aksi">
+                    <option value="tambah">➕ Tambah Stok</option>
+                    <option value="kurang">➖ Kurangi Stok</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-dark">Jumlah</label>
+                <input type="number" class="form-control text-dark" name="jumlah" min="1" value="5" required>
+            </div>
+            <div class="col-md-2 d-flex align-items-end"><button type="submit" class="btn btn-success w-100 fw-bold">Eksekusi</button></div>
+        </form>
+        <hr>
+        <h6 class="fw-bold text-primary mb-3">➕ Pasok Produk Baru ke Sistem</h6>
+        <form action="/tambah_barang" method="POST" class="row g-3 text-start">
+            <div class="col-md-6"><label class="form-label small fw-bold">Nama</label><input type="text" class="form-control" name="nama" required></div>
+            <div class="col-md-6"><label class="form-label small fw-bold">Harga Jual</label><input type="number" class="form-control" name="harga" required></div>
+            <div class="col-md-4"><label class="form-label small fw-bold">Stok Awal</label><input type="number" class="form-control" name="stok" value="10" required></div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Kategori</label>
+                <select class="form-select" name="kategori">{% for kategori in barang.keys() %}<option value="{{ kategori }}">{{ kategori }}</option>{% endfor %}</select>
+            </div>
+            <div class="col-md-4"><label class="form-label small fw-bold">Icon</label><input type="text" class="form-control" name="icon" required></div>
+            <div class="col-12 mt-3"><button type="submit" class="btn btn-primary w-100 fw-bold">Daftarkan Produk</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="modal fade" id="modalBayar" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">Selesaikan Pembayaran</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <h3 class="text-center text-danger mb-4" id="modal-total-bayar">Rp 0</h3>
+        <div class="mb-3">
+            <label class="form-label fw-bold">Metode</label>
+            <select class="form-select form-select-lg" id="metode-bayar" onchange="cekMetode()">
+                <option value="Cash">Tunai (Cash)</option>
+                <option value="QRIS">QRIS / E-Wallet</option>
+                <option value="Kartu Debit">Kartu Debit / Kredit</option>
+            </select>
+        </div>
+        <div class="mb-3" id="div-uang-cash">
+            <label class="form-label fw-bold">Uang Customer (Rp)</label>
+            <input type="number" class="form-control form-control-lg" id="uang-customer" placeholder="Masukkan Nominal">
+        </div>
+      </div>
+      <div class="modal-footer d-flex">
+        <button type="button" class="btn btn-secondary flex-fill" data-bs-dismiss="modal">Batal</button>
+        <button type="button" class="btn btn-success fw-bold flex-fill" onclick="prosesBayar()">Bayar Sekarang</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalQRIS" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content text-center p-4 shadow-lg">
+        <h5 class="fw-bold mb-3">Scan QRIS</h5>
+        <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/QR_code_for_mobile_English_Wikipedia.svg" alt="QRIS" class="img-fluid mb-3 mx-auto" style="width: 180px;">
+        <h5 class="text-danger fw-bold" id="qris-total">Rp 0</h5>
+        <p class="text-muted small mb-2">Menunggu pemindaian...</p>
+        <div class="spinner-grow text-primary spinner-grow-sm mb-4" role="status"></div>
+        <button class="btn btn-primary w-100 fw-bold" onclick="simulasiQRISSukses()">Simulasikan Sukses</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalStruk" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content struk-kertas bg-light text-dark p-3 shadow-lg border-0">
+        <div class="text-center fw-bold fs-5">PUKIMART</div>
+        <div class="text-center" style="font-size: 0.8rem;">Jl. Informatika No.1, Indo<br><span id="waktu-struk"></span></div>
+        <div class="garis-putus"></div>
+        <div id="isi-struk"></div>
+        <div id="diskon-struk"></div> <div class="garis-putus"></div>
+        <div class="d-flex justify-content-between fw-bold"><span>TOTAL BAYAR</span><span id="struk-total"></span></div>
+        <div class="d-flex justify-content-between"><span>Bayar (<span id="struk-metode"></span>)</span><span id="struk-bayar"></span></div>
+        <div class="d-flex justify-content-between"><span>Kembali</span><span id="struk-kembali"></span></div>
+        <div class="garis-putus"></div>
+        <div class="text-center mt-2">Terima Kasih!<br>Layanan Konsumen: 14045</div>
+        <button type="button" class="btn btn-outline-dark btn-sm w-100 mt-4" onclick="selesaiTransaksi()">Tutup & Selesai</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let keranjang = [];
+    let subtotalGlobal = 0;
+    let diskonGlobal = 0;
+    let totalAkhirGlobal = 0;
+    let listPromoGlobal = []; // Nyimpen teks promo buat dicetak di struk
+    
+    function formatRp(angka) { return 'Rp ' + Math.round(angka).toLocaleString('id-ID'); }
+
+    function toggleDarkMode() {
+        let htmlNode = document.documentElement;
+        htmlNode.setAttribute('data-bs-theme', htmlNode.getAttribute('data-bs-theme') === 'light' ? 'dark' : 'light');
+    }
+
+    function tambahKeKeranjang(elementCard) {
+        let nama = elementCard.getAttribute('data-nama');
+        let harga = parseInt(elementCard.getAttribute('data-harga'));
+        let stokTersedia = parseInt(elementCard.getAttribute('data-stok'));
+
+        let jumlahDiKeranjang = keranjang.filter(item => item.nama === nama).length;
+        if (jumlahDiKeranjang >= stokTersedia) return alert(`Stok produk "${nama}" tidak mencukupi!`);
+
+        keranjang.push({ nama: nama, harga: harga });
+        let idDisplay = "stok-display-" + elementCard.id.replace('card-', '');
+        document.getElementById(idDisplay).innerText = "Stok: " + (stokTersedia - (jumlahDiKeranjang + 1));
+
+        renderKeranjang();
+    }
+
+    function hapusBarang(index) {
+        let itemDihapus = keranjang[index];
+        keranjang.splice(index, 1);
+
+        let cleanId = "card-" + itemDihapus.nama.replace(/\s+/g, '-');
+        let elementCard = document.getElementById(cleanId);
+        if (elementCard) {
+            let stokTersedia = parseInt(elementCard.getAttribute('data-stok'));
+            let jumlahSekarang = keranjang.filter(item => item.nama === itemDihapus.nama).length;
+            document.getElementById("stok-display-" + cleanId.replace('card-', '')).innerText = "Stok: " + (stokTersedia - jumlahSekarang);
+        }
+        renderKeranjang();
+    }
+
+    // --- MESIN PENGHITUNG DISKON & PROMO ---
+    function kalkulasiPromo() {
+        subtotalGlobal = keranjang.reduce((sum, item) => sum + item.harga, 0);
+        diskonGlobal = 0;
+        listPromoGlobal = [];
+
+        if (subtotalGlobal === 0) return;
+
+        // 1. Promo Bundling Nyantai (Teh Pucuk + Beng-Beng)
+        let jmlTeh = keranjang.filter(i => i.nama === "Teh Pucuk Harum").length;
+        let jmlBeng = keranjang.filter(i => i.nama === "Beng-Beng").length;
+        let paketCombo = Math.min(jmlTeh, jmlBeng);
+        
+        if (paketCombo > 0) {
+            let potongCombo = paketCombo * 2000;
+            diskonGlobal += potongCombo;
+            listPromoGlobal.push(`Paket Teh+Bengbeng (x${paketCombo}) : -Rp ${potongCombo.toLocaleString('id-ID')}`);
+        }
+
+        // 2. Diskon 10% untuk transaksi di atas 150rb (setelah dipotong bundling)
+        let hargaSementara = subtotalGlobal - diskonGlobal;
+        if (hargaSementara >= 150000) {
+            let potongBesar = hargaSementara * 0.10;
+            diskonGlobal += potongBesar;
+            listPromoGlobal.push(`Diskon Belanja Sultan (10%) : -Rp ${Math.round(potongBesar).toLocaleString('id-ID')}`);
+        }
+
+        totalAkhirGlobal = subtotalGlobal - diskonGlobal;
+    }
+
+    function renderKeranjang() {
+        let list = document.getElementById('list-keranjang');
+        list.innerHTML = "";
+        
+        if (keranjang.length === 0) {
+            list.innerHTML = '<li class="list-group-item text-center text-muted small mt-4" id="keranjang-kosong">Keranjang masih kosong...</li>';
+            document.getElementById('subtotal-harga').innerText = "Rp 0";
+            document.getElementById('promo-container').innerHTML = "";
+            document.getElementById('total-harga').innerText = "Rp 0";
+            return;
+        } 
+        
+        // Render List Barang
+        keranjang.forEach((item, index) => {
+            list.innerHTML += `
+                <li class="list-group-item d-flex justify-content-between align-items-center px-1 px-md-2">
+                    <div class="text-truncate w-75">
+                        <span class="fw-bold d-block" style="font-size: 0.9rem;">${item.nama}</span>
+                        <span class="text-muted" style="font-size: 0.8rem;">${formatRp(item.harga)}</span>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="hapusBarang(${index})">X</button>
+                </li>
+            `;
+        });
+
+        // Jalankan Kalkulasi
+        kalkulasiPromo();
+
+        // Render Angka ke HTML
+        document.getElementById('subtotal-harga').innerText = formatRp(subtotalGlobal);
+        
+        let promoHTML = "";
+        listPromoGlobal.forEach(promo => {
+            promoHTML += `<div class="d-flex justify-content-between text-success fw-bold"><span>🔥 ${promo.split(' : ')[0]}</span><span>${promo.split(' : ')[1]}</span></div>`;
+        });
+        document.getElementById('promo-container').innerHTML = promoHTML;
+
+        document.getElementById('total-harga').innerText = formatRp(totalAkhirGlobal);
+    }
+
+    let modalBayar = new bootstrap.Modal(document.getElementById('modalBayar'));
+    let modalQRIS = new bootstrap.Modal(document.getElementById('modalQRIS'));
+    let modalStruk = new bootstrap.Modal(document.getElementById('modalStruk'));
+
+    function bukaModalBayar() {
+        if (keranjang.length === 0) return alert("Pilih barang dulu dong!");
+        document.getElementById('modal-total-bayar').innerHTML = formatRp(totalAkhirGlobal); // Gunakan total setelah diskon
+        document.getElementById('uang-customer').value = "";
+        cekMetode();
+        modalBayar.show();
+    }
+
+    function cekMetode() {
+        let metode = document.getElementById('metode-bayar').value;
+        document.getElementById('div-uang-cash').style.display = (metode === 'Cash') ? 'block' : 'none';
+    }
+
+    function kirimDataKeServer(total, itemsList) {
+        let formData = new FormData();
+        formData.append('total', total); // Omset yang masuk adalah uang yang dibayar setelah diskon
+        formData.append('items', JSON.stringify(itemsList));
+        fetch('/catat_transaksi', { method: 'POST', body: formData });
+    }
+
+    function prosesBayar() {
+        let metode = document.getElementById('metode-bayar').value;
+        let uang = 0;
+
+        if (metode === 'Cash') {
+            uang = parseInt(document.getElementById('uang-customer').value);
+            if (isNaN(uang) || uang < totalAkhirGlobal) return alert("Uang kurang atau format tidak valid!");
+        } else {
+            uang = totalAkhirGlobal; 
+        }
+
+        siapkanStruk(totalAkhirGlobal, metode, uang, uang - totalAkhirGlobal);
+        modalBayar.hide();
+
+        if (metode === 'QRIS') {
+            document.getElementById('qris-total').innerHTML = formatRp(totalAkhirGlobal);
+            modalQRIS.show(); 
+        } else {
+            kirimDataKeServer(totalAkhirGlobal, keranjang);
+            if (metode === 'Kartu Debit') alert("Mengesek kartu... Transaksi Berhasil!");
+            modalStruk.show();
+        }
+    }
+
+    function simulasiQRISSukses() {
+        modalQRIS.hide();
+        kirimDataKeServer(totalAkhirGlobal, keranjang);
+        setTimeout(() => { modalStruk.show(); }, 400);
+    }
+
+    function siapkanStruk(total, metode, uang, kembali) {
+        // Cetak Barang
+        let isiHTML = "";
+        keranjang.forEach(item => {
+            isiHTML += `<div class="d-flex justify-content-between text-truncate"><span>${item.nama}</span><span>${item.harga.toLocaleString('id-ID')}</span></div>`;
+        });
+        document.getElementById('isi-struk').innerHTML = isiHTML;
+
+        // Cetak List Diskon di Struk
+        let strukDiskonHTML = "";
+        if (diskonGlobal > 0) {
+            strukDiskonHTML += `<div class="garis-putus"></div><div class="fw-bold mb-1">PROMO & DISKON:</div>`;
+            listPromoGlobal.forEach(promo => {
+                strukDiskonHTML += `<div class="d-flex justify-content-between small text-muted"><span>${promo.split(' : ')[0]}</span><span>${promo.split(' : ')[1]}</span></div>`;
+            });
+        }
+        document.getElementById('diskon-struk').innerHTML = strukDiskonHTML;
+
+        // Cetak Footer
+        document.getElementById('waktu-struk').innerHTML = new Date().toLocaleString('id-ID');
+        document.getElementById('struk-total').innerHTML = Math.round(total).toLocaleString('id-ID');
+        document.getElementById('struk-metode').innerHTML = metode;
+        document.getElementById('struk-bayar').innerHTML = Math.round(uang).toLocaleString('id-ID');
+        document.getElementById('struk-kembali').innerHTML = Math.round(kembali).toLocaleString('id-ID');
+    }
+
+    function selesaiTransaksi() {
+        keranjang = [];
+        window.location.reload();
+    }
+</script>
+</body>
+</html>
